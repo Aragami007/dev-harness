@@ -316,8 +316,14 @@ def _print_value(value) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Path(args.root)
-    with locked(root):
-        return _run(args, root)
+    try:
+        if args.cmd != "init" and not state_path(root).exists():
+            raise StateError(f"no state at {state_path(root)}; start a run with /ship")
+        with locked(root):
+            return _run(args, root)
+    except (StateError, ValueError, OSError) as exc:
+        print(f"state.py: {exc}", file=sys.stderr)
+        return 1
 
 
 def _run(args, root: Path) -> int:

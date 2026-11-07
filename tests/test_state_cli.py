@@ -75,3 +75,18 @@ def test_corrupt_state_reports_cleanly(tmp_path, capsys):
     capsys.readouterr()
     assert run(tmp_path, "get") == 1
     assert "state.py:" in capsys.readouterr().err
+
+
+def test_lock_creation_failure_reports_cleanly(tmp_path, capsys):
+    blocker = tmp_path / "file"
+    blocker.write_text("x")
+    rc = st.main(["--root", str(blocker / "sub"), "init", "--slug", "demo", "--idea", "x"])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "state.py:" in err and "Traceback" not in err
+
+
+def test_get_without_state_leaves_no_harness_dir(tmp_path, capsys):
+    assert run(tmp_path, "get") == 1
+    assert "state.py: no state at" in capsys.readouterr().err
+    assert not (tmp_path / ".harness").exists()
