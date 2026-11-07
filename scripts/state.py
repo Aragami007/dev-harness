@@ -243,3 +243,92 @@ def reset_missing_worktrees(state: dict) -> list[str]:
             reset.append(ticket["id"])
             log_event(state, "ticket_reset", id=ticket["id"])
     return reset
+
+
+def _parse_deps(raw: str) -> list[str]:
+    return [d.strip() for d in raw.split(",") if d.strip()]
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="state.py", description="dev-harness state machine")
+    parser.add_argument("--root", default=".", help="repository root (default: .)")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    init = sub.add_parser("init")
+    init.add_argument("--slug", required=True)
+    init.add_argument("--idea", required=True)
+    sub.add_parser("get").add_argument("--field")
+    sub.add_parser("transition").add_argument("to")
+    sub.add_parser("set-route").add_argument("route")
+    sub.add_parser("set-gate").add_argument("gate")
+    sub.add_parser("approve-gate").add_argument("gate")
+    art = sub.add_parser("set-artifact")
+    art.add_argument("key")
+    art.add_argument("path")
+    tadd = sub.add_parser("ticket-add")
+    tadd.add_argument("--id", required=True)
+    tadd.add_argument("--issue", type=int)
+    tadd.add_argument("--deps", default="")
+    tupd = sub.add_parser("ticket-update")
+    tupd.add_argument("--id", required=True)
+    tupd.add_argument("--status", required=True)
+    tupd.add_argument("--worktree")
+    sub.add_parser("runnable")
+    sub.add_parser("resume-check")
+    logp = sub.add_parser("log")
+    logp.add_argument("event")
+    logp.add_argument("--note", default="")
+    return parser
+
+
+def _print_value(value) -> None:
+    print(value if isinstance(value, str) else json.dumps(value, indent=2))
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    root = Path(args.root)
+    try:
+        if args.cmd == "init":
+            if state_path(root).exists() and load(root)["phase"] not in TERMINAL:
+                raise StateError("an active run exists; use /ship --resume or /ship --abort")
+            state = new_state(args.slug, args.idea)
+            log_event(state, "init")
+            save(root, state)
+            print(state_path(root))
+            return 0
+        state = load(root)
+        if args.cmd == "get":
+            if args.field and args.field not in state:
+                raise StateError(f"unknown field {args.field!r}")
+            _print_value(state[args.field] if args.field else state)
+            return 0
+        if args.cmd == "transition":
+            transition(state, args.to)
+        elif args.cmd == "set-route":
+            set_route(state, args.route)
+        elif args.cmd == "set-gate":
+            set_gate(state, args.gate)
+        elif args.cmd == "approve-gate":
+            approve_gate(state, args.gate)
+        elif args.cmd == "set-artifact":
+            set_artifact(state, args.key, args.path)
+        elif args.cmd == "ticket-add":
+            add_ticket(state, args.id, args.issue, _parse_deps(args.deps))
+        elif args.cmd == "ticket-update":
+            update_ticket(state, args.id, args.status, args.worktree)
+        elif args.cmd == "runnable":
+            print(json.dumps([t["id"] for t in runnable_tickets(state)]))
+            return 0
+        elif args.cmd == "resume-check":
+            print(json.dumps(reset_missing_worktrees(state)))
+        elif args.cmd == "log":
+            log_event(state, args.event, note=args.note)
+        save(root, state)
+        return 0
+    except StateError as exc:
+        print(f"state.py: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
