@@ -48,7 +48,7 @@ def test_orchestrator_resume_and_start_ordering():
     text = read("skills/harness-orchestrator/SKILL.md")
     start = text.split("## Start")[1].split("## Resume")[0]
     assert start.index("git checkout -b harness/<slug>") < start.index("git add .gitignore")
-    assert start.index("git checkout -b harness/<slug>") < start.index("state.py init")
+    assert start.index("state.py init") < start.index("git checkout -b harness/<slug>")
     resume = text.split("## Resume")[1].split("## Phase: triage")[0]
     assert "gh pr view <url> --json state -q .state" in resume
     assert "do not transition to build" in text

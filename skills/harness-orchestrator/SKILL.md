@@ -46,10 +46,10 @@ This table is the only place the harness names Matt Pocock's skills. If one is r
 
 1. `python3 "$SCRIPTS/preflight.py" --root .` If it exits non-zero, show its output and stop.
 2. Make a slug from the idea: lowercase, hyphen-separated, letters, digits and hyphens only, at most 48 characters.
-3. From the default branch: `git checkout -b harness/<slug>`
-4. If preflight printed `updated .gitignore`: `git add .gitignore && git commit -m "chore: ignore dev-harness state"` (now on `harness/<slug>`).
-5. If `.harness/setup-done` does not exist: invoke `setup-matt-pocock-skills` with GitHub as the issue tracker, then run `mkdir -p .harness && touch .harness/setup-done`. Commit any files it changed on `harness/<slug>`.
-6. `state.py init --slug <slug> --idea "<idea>"`
+3. `state.py init --slug <slug> --idea "<idea>"`. If it fails (for example, an active run exists), show its message and stop.
+4. From the default branch: `git checkout -b harness/<slug>`
+5. If preflight printed `updated .gitignore`: `git add .gitignore && git commit -m "chore: ignore dev-harness state"` (now on `harness/<slug>`).
+6. If `.harness/setup-done` does not exist: invoke `setup-matt-pocock-skills` with GitHub as the issue tracker, then run `mkdir -p .harness && touch .harness/setup-done`. Commit any files it changed on `harness/<slug>`.
 7. `state.py transition triage`, then continue with **Phase: triage**.
 
 ## Resume
