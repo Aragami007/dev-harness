@@ -154,3 +154,92 @@ def set_artifact(state: dict, key: str, path: str) -> None:
         raise StateError(f"unsafe artifact path {path!r}")
     state["artifacts"][key] = path
     log_event(state, "artifact", key=key, path=path)
+
+
+TICKET_UPDATE_STATUSES = ("ready", "in-progress", "done", "failed")
+SETTLED = {"done", "blocked"}
+
+
+def find_ticket(state: dict, tid: str) -> dict:
+    for ticket in state["tickets"]:
+        if ticket["id"] == tid:
+            return ticket
+    raise StateError(f"unknown ticket {tid!r}")
+
+
+def add_ticket(state: dict, tid: str, issue: int | None, deps: list[str]) -> None:
+    if state["phase"] not in ("tickets", "build"):
+        raise StateError("tickets can only be added in the tickets or build phase")
+    if not TICKET_ID_RE.fullmatch(tid):
+        raise StateError(f"invalid ticket id {tid!r}")
+    if any(t["id"] == tid for t in state["tickets"]):
+        raise StateError(f"ticket {tid!r} already exists")
+    for dep in deps:
+        find_ticket(state, dep)
+    state["tickets"].append({
+        "id": tid,
+        "issue": int(issue) if issue is not None else None,
+        "deps": list(deps),
+        "status": "ready",
+        "attempts": 0,
+        "worktree": None,
+        "block_reason": None,
+    })
+    log_event(state, "ticket_added", id=tid, issue=issue, deps=list(deps))
+
+
+def _block(state: dict, ticket: dict, reason: str) -> None:
+    ticket["status"] = "blocked"
+    ticket["block_reason"] = reason
+    queue = [ticket["id"]]
+    while queue:
+        blocked_id = queue.pop()
+        for other in state["tickets"]:
+            if blocked_id in other["deps"] and other["status"] not in SETTLED:
+                other["status"] = "blocked"
+                other["block_reason"] = f"dependency {blocked_id}"
+                queue.append(other["id"])
+
+
+def update_ticket(state: dict, tid: str, status: str, worktree: str | None = None) -> None:
+    if status not in TICKET_UPDATE_STATUSES:
+        raise StateError(f"status must be one of {TICKET_UPDATE_STATUSES}")
+    ticket = find_ticket(state, tid)
+    if ticket["status"] in SETTLED:
+        raise StateError(f"ticket {tid} is already {ticket['status']}")
+    if worktree is not None:
+        if "\n" in worktree or "\r" in worktree:
+            raise StateError("worktree path must be a single line")
+        ticket["worktree"] = worktree
+    if status == "failed":
+        ticket["attempts"] += 1
+        if ticket["attempts"] >= MAX_ATTEMPTS:
+            _block(state, ticket, f"failed {ticket['attempts']} attempts")
+        else:
+            ticket["status"] = "ready"
+    else:
+        ticket["status"] = status
+    log_event(state, "ticket", id=tid, status=ticket["status"], attempts=ticket["attempts"])
+
+
+def runnable_tickets(state: dict) -> list[dict]:
+    done = {t["id"] for t in state["tickets"] if t["status"] == "done"}
+    return [
+        t for t in state["tickets"]
+        if t["status"] in ("ready", "in-progress") and all(d in done for d in t["deps"])
+    ]
+
+
+def all_settled(state: dict) -> bool:
+    return all(t["status"] in SETTLED for t in state["tickets"])
+
+
+def reset_missing_worktrees(state: dict) -> list[str]:
+    reset = []
+    for ticket in state["tickets"]:
+        if ticket["status"] == "in-progress" and ticket["worktree"] and not Path(ticket["worktree"]).exists():
+            ticket["status"] = "ready"
+            ticket["worktree"] = None
+            reset.append(ticket["id"])
+            log_event(state, "ticket_reset", id=ticket["id"])
+    return reset
