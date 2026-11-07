@@ -32,7 +32,8 @@ def test_concurrent_cli_updates_are_not_lost(tmp_path):
             for tid in ("A", "B")
         ]
         for p in procs:
-            assert p.wait() == 0
+            p.communicate()
+            assert p.returncode == 0
     events = [e["event"] for e in st.load(tmp_path)["log"]]
     for tid in ("A", "B"):
         for i in range(20):
