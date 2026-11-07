@@ -98,3 +98,28 @@ def test_main_blocks_and_saves(tmp_path, monkeypatch, capsys):
     code, out = run_main(monkeypatch, capsys, json.dumps({"cwd": str(tmp_path)}))
     assert code == 0 and json.loads(out)["decision"] == "block"
     assert st.load(tmp_path)["build_iterations"] == 1
+
+
+def test_main_non_object_json_is_silent(monkeypatch, capsys):
+    assert run_main(monkeypatch, capsys, "[]") == (0, "")
+
+
+def test_main_non_string_cwd_is_silent(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    assert run_main(monkeypatch, capsys, json.dumps({"cwd": 5})) == (0, "")
+
+
+def test_main_corrupt_state_is_silent(tmp_path, monkeypatch, capsys):
+    (tmp_path / ".harness").mkdir()
+    (tmp_path / ".harness" / "state.json").write_text("{not json")
+    assert run_main(monkeypatch, capsys, json.dumps({"cwd": str(tmp_path)})) == (0, "")
+
+
+def test_main_save_failure_is_silent(tmp_path, monkeypatch, capsys):
+    st.save(tmp_path, build_state(("T1", [])))
+
+    def fail(root, state):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(bl.st, "save", fail)
+    assert run_main(monkeypatch, capsys, json.dumps({"cwd": str(tmp_path)})) == (0, "")

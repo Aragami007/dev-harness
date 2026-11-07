@@ -62,17 +62,18 @@ def decide(root, state: dict) -> dict | None:
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
-    except ValueError:
-        return 0
-    root = Path(payload.get("cwd") or ".")
-    if not st.state_path(root).exists():
-        return 0
-    try:
+        if not isinstance(payload, dict):
+            return 0
+        cwd = payload.get("cwd")
+        root = Path(cwd if isinstance(cwd, str) and cwd else ".")
+        if not st.state_path(root).exists():
+            return 0
         state = st.load(root)
-    except (st.StateError, ValueError, OSError):
+        result = decide(root, state)
+        st.save(root, state)
+    except Exception:
+        # A hook must never break the session: any failure allows the stop.
         return 0
-    result = decide(root, state)
-    st.save(root, state)
     if result:
         print(json.dumps(result))
     return 0
