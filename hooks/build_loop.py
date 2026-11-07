@@ -29,6 +29,18 @@ def stop_file(root) -> Path:
     return Path(root) / ".harness" / "STOP"
 
 
+def _valid_branch(branch) -> bool:
+    if not isinstance(branch, str) or not branch.startswith("harness/"):
+        return False
+    return bool(st.SLUG_RE.fullmatch(branch[len("harness/"):]))
+
+
+def _valid_runnable(runnable, spec) -> bool:
+    if not isinstance(spec, str) or not st.SAFE_PATH_RE.fullmatch(spec):
+        return False
+    return all(isinstance(t.get("id"), str) and st.TICKET_ID_RE.fullmatch(t["id"]) for t in runnable)
+
+
 def decide(root, state: dict) -> dict | None:
     if state["phase"] != "build" or state["gate_pending"]:
         return None
@@ -40,6 +52,9 @@ def decide(root, state: dict) -> dict | None:
         return None
     runnable = st.runnable_tickets(state)
     if runnable:
+        if not _valid_runnable(runnable, state["artifacts"].get("spec")):
+            st.log_event(state, "invalid_state")
+            return None
         state["build_iterations"] += 1
         reason = BUILD_REASON.format(
             n=state["build_iterations"],
@@ -52,6 +67,9 @@ def decide(root, state: dict) -> dict | None:
         st.log_event(state, "stalled")
         return None
     if any(t["status"] == "done" for t in state["tickets"]):
+        if not _valid_branch(state.get("integration_branch")):
+            st.log_event(state, "invalid_state")
+            return None
         st.transition(state, "pr")
         return {"decision": "block", "reason": PR_REASON.format(branch=state["integration_branch"])}
     st.transition(state, "done")
