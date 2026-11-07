@@ -359,7 +359,7 @@ def _run(args, root: Path) -> int:
             log_event(state, args.event, note=args.note)
         save(root, state)
         return 0
-    except StateError as exc:
+    except (StateError, ValueError, OSError) as exc:
         print(f"state.py: {exc}", file=sys.stderr)
         return 1
 

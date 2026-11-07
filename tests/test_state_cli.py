@@ -67,3 +67,11 @@ def test_log_command(tmp_path):
     run(tmp_path, "init", "--slug", "demo", "--idea", "x")
     assert run(tmp_path, "log", "note", "--note", "hello") == 0
     assert st.load(tmp_path)["log"][-1]["note"] == "hello"
+
+
+def test_corrupt_state_reports_cleanly(tmp_path, capsys):
+    run(tmp_path, "init", "--slug", "demo", "--idea", "x")
+    st.state_path(tmp_path).write_text("{not json")
+    capsys.readouterr()
+    assert run(tmp_path, "get") == 1
+    assert "state.py:" in capsys.readouterr().err
