@@ -42,3 +42,13 @@ def test_orchestrator_names_every_required_skill():
 def test_ship_command_loads_orchestrator():
     text = read("commands/ship.md")
     assert "dev-harness:harness-orchestrator" in text and "$ARGUMENTS" in text
+
+
+def test_orchestrator_resume_and_start_ordering():
+    text = read("skills/harness-orchestrator/SKILL.md")
+    start = text.split("## Start")[1].split("## Resume")[0]
+    assert start.index("git checkout -b harness/<slug>") < start.index("git add .gitignore")
+    assert start.index("git checkout -b harness/<slug>") < start.index("state.py init")
+    resume = text.split("## Resume")[1].split("## Phase: triage")[0]
+    assert "gh pr view <url> --json state -q .state" in resume
+    assert "do not transition to build" in text

@@ -45,18 +45,18 @@ This table is the only place the harness names Matt Pocock's skills. If one is r
 ## Start
 
 1. `python3 "$SCRIPTS/preflight.py" --root .` If it exits non-zero, show its output and stop.
-2. If it printed `updated .gitignore`: `git add .gitignore && git commit -m "chore: ignore dev-harness state"`
-3. If `.harness/setup-done` does not exist: invoke `setup-matt-pocock-skills` with GitHub as the issue tracker, then run `mkdir -p .harness && touch .harness/setup-done`.
-4. Make a slug from the idea: lowercase, hyphen-separated, letters, digits and hyphens only, at most 48 characters.
-5. `state.py init --slug <slug> --idea "<idea>"`
-6. From the default branch: `git checkout -b harness/<slug>`
+2. Make a slug from the idea: lowercase, hyphen-separated, letters, digits and hyphens only, at most 48 characters.
+3. From the default branch: `git checkout -b harness/<slug>`
+4. If preflight printed `updated .gitignore`: `git add .gitignore && git commit -m "chore: ignore dev-harness state"` (now on `harness/<slug>`).
+5. If `.harness/setup-done` does not exist: invoke `setup-matt-pocock-skills` with GitHub as the issue tracker, then run `mkdir -p .harness && touch .harness/setup-done`. Commit any files it changed on `harness/<slug>`.
+6. `state.py init --slug <slug> --idea "<idea>"`
 7. `state.py transition triage`, then continue with **Phase: triage**.
 
 ## Resume
 
 1. `state.py resume-check`. This resets in-progress tickets whose worktrees have disappeared.
 2. `state.py get --field slug`, `--field phase`, `--field gate_pending`. Then `git checkout harness/<slug>`.
-3. If a gate is pending, ask that gate's question again (Gate procedure, step 2). Otherwise continue with the section for the current phase.
+3. If a gate is pending, re-ask it by running that gate's step from the current phase's section, including its checks. For the `pr` gate, verify that `gh pr view <url> --json state -q .state` prints `MERGED` before `state.py approve-gate pr`. If no gate is pending, continue with the section for the current phase.
 
 ## Phase: triage
 
@@ -91,9 +91,10 @@ This table is the only place the harness names Matt Pocock's skills. If one is r
 ## Phase: tickets
 
 1. Invoke `to-tickets` on the spec, with GitHub Issues as the tracker.
-2. Register each ticket in dependency order: `state.py ticket-add --id T<n> --issue <number> --deps T<a>,T<b>` (leave out `--deps` when there are none).
-3. `python3 "$SCRIPTS/tickets_sync.py" --ensure-labels`
-4. `state.py transition build`
+2. If `to-tickets` produced no tickets, stop and tell the user; do not transition to build.
+3. Register each ticket in dependency order: `state.py ticket-add --id T<n> --issue <number> --deps T<a>,T<b>` (leave out `--deps` when there are none).
+4. `python3 "$SCRIPTS/tickets_sync.py" --ensure-labels`
+5. `state.py transition build`
 
 ## Phase: build (AFK)
 
