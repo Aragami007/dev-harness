@@ -27,6 +27,12 @@ claude --plugin-dir /path/to/dev-harness
 | `/ship --abort` | stop the run |
 | `touch .harness/STOP` | halt the AFK build loop at the next stop |
 
+## Limitations
+
+- The guard is best-effort protection against accidental commands, not an adversarial bypass barrier.
+- `repo_root` needs git 2.31 or newer (`--path-format=absolute`); on older git it falls back to the working directory.
+- During the build phase, any Claude session in the same repository is kept going by the Stop hook. Run other sessions elsewhere, or `touch .harness/STOP`.
+
 ## Develop
 
 ```bash
