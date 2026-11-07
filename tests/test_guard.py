@@ -206,3 +206,14 @@ def test_guard_denies_extra_shapes(tmp_path, cmd, current):
 
 def test_guard_allows_feature_push_still(tmp_path):
     assert bash(tmp_path, "git push -u origin harness/demo", run_state("build")) is None
+
+
+def test_relative_ticket_worktree_resolves_against_root(tmp_path):
+    root = tmp_path / "repo"
+    sub = root / "sub"
+    sub.mkdir(parents=True)
+    ticket = {"id": "T1", "issue": None, "deps": [], "status": "in-progress",
+              "attempts": 0, "worktree": "wt/T1", "block_reason": None}
+    s = run_state("build", [ticket])
+    p = payload("Edit", sub, file_path=str(root / "wt" / "T1" / "a.py"))
+    assert guard.check(p, s, "main", "x", root=root) is None

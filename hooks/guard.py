@@ -169,7 +169,8 @@ def check(
         if _is_state_file(target):
             return STATE_MSG
         if active and state["phase"] == "build":
-            allowed = [Path(root).resolve() if root is not None else cwd] + [_resolve(cwd, t["worktree"]) for t in state["tickets"] if t.get("worktree")]
+            base = Path(root).resolve() if root is not None else cwd
+            allowed = [base] + [_resolve(base, t["worktree"]) for t in state["tickets"] if t.get("worktree")]
             if not any(target == a or a in target.parents for a in allowed):
                 return f"during build, edits must stay inside the repo or a ticket worktree (got {target})"
         return None
