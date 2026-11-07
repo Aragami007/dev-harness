@@ -57,7 +57,7 @@ dev-harness/
 - **`commands/ship.md`** — entry point. Forms: `/ship "<idea>"` (start), `/ship --resume`, `/ship --status`, `/ship --abort`. Loads the orchestrator skill and delegates.
 - **`skills/harness-orchestrator`** — the phase table above, gate rules, and the instruction that every state change goes through `scripts/state.py`. At a gate it uses AskUserQuestion and records the answer.
 - **`skills/harness-triage`** — fixed questionnaire: expected size (sessions), is the architecture known, are there unresolved external unknowns. Any "unknown architecture" or ">1 session with open decisions" answer → FOGGY.
-- **`scripts/state.py`** — the sole writer of `.harness/state.json`. Subcommands: `init`, `get`, `transition <phase>`, `set-gate`, `clear-gate`, `ticket-update`, `log`. Validates transitions against the legal-transition table; illegal transitions exit non-zero with a message.
+- **`scripts/state.py`** — the sole writer of `.harness/state.json`. Subcommands: `init`, `get`, `transition <phase>`, `set-route`, `set-gate`, `approve-gate` (records the approval in `approvals`), `set-artifact`, `ticket-add`, `ticket-update`, `runnable`, `resume-check`, `log`. Validates transitions against the legal-transition table; illegal transitions exit non-zero with a message.
 - **`scripts/tickets_sync.py`** — mirrors ticket status to GitHub labels (`harness:ready`, `harness:in-progress`, `harness:blocked`, `harness:done`) via `gh`. One-directional: state → GitHub.
 - **`scripts/preflight.py`** — checks: inside a git repo, clean working tree, `gh auth status` ok, Matt's skills discoverable. On failure, prints the exact fix command and exits non-zero.
 - **`hooks/build_loop.py`** (Stop hook) — see §6.
@@ -75,6 +75,7 @@ dev-harness/
   "phase": "build",
   "route": "STANDARD",
   "gate_pending": null,
+  "approvals": ["route", "spec"],
   "artifacts": { "map": null, "spec": "docs/specs/add-version-flag/spec.md", "pr": null },
   "integration_branch": "harness/add-version-flag",
   "tickets": [
@@ -85,7 +86,7 @@ dev-harness/
 }
 ```
 
-Legal transitions: `preflight→triage→(fog|align)`, `fog→align→spec→tickets→build→pr→retro→done`, any phase→`aborted`. `spec→tickets` requires the Gate 2 approval to be recorded; `triage→*` requires Gate 1.
+Legal transitions: `preflight→triage→(fog|align)`, `fog→align→spec→tickets→build→pr→retro→done`, any phase→`aborted`. `triage→*` requires Gate 1, `spec→tickets` requires Gate 2, and `pr→retro` requires Gate 3 to be in `approvals`.
 
 Ticket statuses: `ready → in-progress → (done | failed)`; `failed` with `attempts ≥ 3` → `blocked`.
 
