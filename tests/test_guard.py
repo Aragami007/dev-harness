@@ -72,6 +72,57 @@ def test_allows_integration_branch_push(tmp_path):
     assert bash(tmp_path, "git push -u origin harness/fix-main-menu", run_state()) is None
 
 
+@pytest.mark.parametrize("cmd", [
+    "git push -fu origin harness/demo",
+    "git push -uf origin harness/demo",
+    "git -c k=v push -f origin harness/demo",
+    "ls;git push -f origin harness/demo",
+    "bash -c 'git push -f origin harness/demo'",
+])
+def test_blocks_force_push_variants(tmp_path, cmd):
+    assert "force" in bash(tmp_path, cmd, run_state())
+
+
+@pytest.mark.parametrize("cmd", [
+    "git push origin x&&git push origin main",
+    "git -C dir push origin main",
+    "git --git-dir=.git push origin main",
+    "git --no-pager push origin main",
+    "sh -c \"git push origin main\"",
+    "zsh -c 'cd x && git push origin main'",
+    "bash -c \"bash -c 'git push origin main'\"",
+    "git push --all",
+    "git push --mirror origin",
+])
+def test_blocks_push_to_default_variants(tmp_path, cmd):
+    assert bash(tmp_path, cmd, run_state())
+
+
+def test_head_push_resolves_to_current_branch(tmp_path):
+    assert bash(tmp_path, "git push origin HEAD", run_state(), current="main")
+    assert bash(tmp_path, "git push origin HEAD", run_state(), current="harness/demo") is None
+
+
+def test_git_global_opts_merge_on_default(tmp_path):
+    assert bash(tmp_path, "git -C . merge x", run_state(), current="main")
+    assert bash(tmp_path, "git -C . merge x", run_state(), current="harness/demo") is None
+
+
+@pytest.mark.parametrize("cmd", [
+    "gh -R o/r pr merge 1",
+    "gh --repo o/r pr merge 1",
+    "gh --repo=o/r pr merge 1",
+    "true;gh pr merge 1",
+    "bash -c 'gh pr merge 1'",
+])
+def test_blocks_gh_pr_merge_variants(tmp_path, cmd):
+    assert bash(tmp_path, cmd, run_state())
+
+
+def test_gh_pr_view_allowed(tmp_path):
+    assert bash(tmp_path, "gh -R o/r pr view 1", run_state()) is None
+
+
 def test_blocks_gh_pr_merge(tmp_path):
     assert bash(tmp_path, "gh pr merge 12 --squash", run_state())
 

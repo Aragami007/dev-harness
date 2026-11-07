@@ -15,15 +15,68 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import state as st  # noqa: E402
 
 EDIT_TOOLS = {"Write", "Edit", "MultiEdit", "NotebookEdit"}
-SEPARATORS = {"&&", "||", ";", "|"}
 STATE_MSG = "write .harness/state.json only through scripts/state.py"
+
+
+SHELLS = {"bash", "sh", "zsh"}
+MAX_DEPTH = 3
+GIT_OPTS_WITH_ARG = {"-C", "-c", "--git-dir", "--work-tree"}
+GH_OPTS_WITH_ARG = {"-R", "--repo"}
 
 
 def _tokens(cmd: str) -> list[str]:
     try:
-        return shlex.split(cmd)
+        lex = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+        lex.whitespace_split = True
+        return list(lex)
     except ValueError:
         return cmd.split()
+
+
+def _is_separator(tok: str) -> bool:
+    return bool(tok) and set(tok) <= set(";&|")
+
+
+def _shell_string(simple: list[str]) -> str | None:
+    """The script of a `bash|sh|zsh ... -c <script>` simple command, if any."""
+    for i, tok in enumerate(simple):
+        if Path(tok).name in SHELLS:
+            for j in range(i + 1, len(simple) - 1):
+                if simple[j] == "-c":
+                    return simple[j + 1]
+            return None
+    return None
+
+
+def _commands(cmd: str, depth: int = 0) -> list[list[str]]:
+    """Split a command line into simple commands, expanding `<shell> -c` strings."""
+    simples: list[list[str]] = [[]]
+    for tok in _tokens(cmd):
+        if _is_separator(tok):
+            simples.append([])
+        else:
+            simples[-1].append(tok)
+    out = []
+    for simple in simples:
+        if not simple:
+            continue
+        out.append(simple)
+        script = _shell_string(simple)
+        if script is not None and depth < MAX_DEPTH:
+            out.extend(_commands(script, depth + 1))
+    return out
+
+
+def _subcommand_index(simple: list[str], tool: str, opts_with_arg: set[str]) -> int | None:
+    """Index of the subcommand of `tool` in `simple`, skipping global options."""
+    for i, tok in enumerate(simple):
+        if tok != tool:
+            continue
+        j = i + 1
+        while j < len(simple) and simple[j].startswith("-"):
+            j += 2 if simple[j] in opts_with_arg else 1
+        return j if j < len(simple) else None
+    return None
 
 
 def _resolve(cwd: Path, raw: str) -> Path:
@@ -35,45 +88,58 @@ def _is_state_file(path: Path) -> bool:
     return path.name == "state.json" and path.parent.name == ".harness"
 
 
-def _push_problem(toks: list[str], default_branch: str, current_branch: str) -> str | None:
-    for i in range(len(toks) - 1):
-        if toks[i] != "git" or toks[i + 1] != "push":
-            continue
-        positional = []
-        for tok in toks[i + 2:]:
-            if tok in SEPARATORS:
-                break
-            if tok.startswith("--force") or tok == "-f":
-                return "force-push is blocked by dev-harness"
-            if tok.startswith("-"):
-                continue
+def _is_force_flag(tok: str) -> bool:
+    if tok.startswith("--"):
+        return tok.startswith("--force")
+    return tok.startswith("-") and "f" in tok[1:]
+
+
+def _push_problem(args: list[str], default_branch: str, current_branch: str) -> str | None:
+    positional = []
+    for tok in args:
+        if _is_force_flag(tok):
+            return "force-push is blocked by dev-harness"
+        if tok in ("--all", "--mirror"):
+            return f"{tok} would push {default_branch}; blocked by dev-harness"
+        if not tok.startswith("-"):
             positional.append(tok)
-        refspecs = positional[1:]
-        if not refspecs and current_branch == default_branch:
-            return f"pushing {default_branch} is blocked by dev-harness"
-        for ref in refspecs:
-            if ref.startswith("+"):
-                return "force-push is blocked by dev-harness"
-            dest = ref.split(":")[-1].removeprefix("refs/heads/")
-            if dest == default_branch:
-                return f"pushing to {default_branch} is blocked by dev-harness; the human merges the PR"
+    refspecs = positional[1:]
+    if not refspecs and current_branch == default_branch:
+        return f"pushing {default_branch} is blocked by dev-harness"
+    for ref in refspecs:
+        if ref.startswith("+"):
+            return "force-push is blocked by dev-harness"
+        dest = ref.split(":")[-1].removeprefix("refs/heads/")
+        if dest == "HEAD":
+            dest = current_branch
+        if dest == default_branch:
+            return f"pushing to {default_branch} is blocked by dev-harness; the human merges the PR"
+    return None
+
+
+def _simple_problem(simple: list[str], default_branch: str, current_branch: str) -> str | None:
+    gi = _subcommand_index(simple, "git", GIT_OPTS_WITH_ARG)
+    if gi is not None:
+        if simple[gi] == "push":
+            return _push_problem(simple[gi + 1:], default_branch, current_branch)
+        if simple[gi] == "merge" and current_branch == default_branch:
+            return f"merging into {default_branch} is blocked by dev-harness"
+    hi = _subcommand_index(simple, "gh", GH_OPTS_WITH_ARG)
+    if hi is not None and simple[hi] == "pr" and simple[hi + 1:hi + 2] == ["merge"]:
+        return "merging PRs is the human's job (Gate 3)"
     return None
 
 
 def _bash_problem(cmd: str, active: bool, default_branch: str, current_branch: str) -> str | None:
+    # Best-effort: guards against accidental direct writes, not adversarial bypass.
     if ".harness/state.json" in cmd and "state.py" not in cmd:
         return STATE_MSG
     if not active:
         return None
-    toks = _tokens(cmd)
-    problem = _push_problem(toks, default_branch, current_branch)
-    if problem:
-        return problem
-    for i in range(len(toks) - 1):
-        if toks[i] == "gh" and toks[i + 1] == "pr" and i + 2 < len(toks) and toks[i + 2] == "merge":
-            return "merging PRs is the human's job (Gate 3)"
-        if toks[i] == "git" and toks[i + 1] == "merge" and current_branch == default_branch:
-            return f"merging into {default_branch} is blocked by dev-harness"
+    for simple in _commands(cmd):
+        problem = _simple_problem(simple, default_branch, current_branch)
+        if problem:
+            return problem
     return None
 
 
