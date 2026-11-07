@@ -6,9 +6,12 @@ Used as a library by the hooks and as a CLI by the orchestrator skill.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import json
 import os
 import re
+import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -54,6 +57,32 @@ def now_iso() -> str:
 
 def state_path(root) -> Path:
     return Path(root) / STATE_REL
+
+
+def repo_root(cwd) -> Path:
+    """The main repository root (worktree-safe); falls back to cwd. Never raises."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=cwd, capture_output=True, text=True, timeout=5,
+        )
+        common = result.stdout.strip() if result.returncode == 0 else ""
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        common = ""
+    return Path(common).parent if common else Path(cwd)
+
+
+@contextlib.contextmanager
+def locked(root):
+    """Exclusive advisory lock serialising load-modify-save cycles on the state."""
+    lock_path = Path(root) / ".harness" / "state.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 def new_state(slug: str, idea: str) -> dict:
@@ -287,6 +316,11 @@ def _print_value(value) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Path(args.root)
+    with locked(root):
+        return _run(args, root)
+
+
+def _run(args, root: Path) -> int:
     try:
         if args.cmd == "init":
             if state_path(root).exists() and load(root)["phase"] not in TERMINAL:

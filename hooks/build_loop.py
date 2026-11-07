@@ -86,9 +86,10 @@ def main() -> int:
         root = Path(cwd if isinstance(cwd, str) and cwd else ".")
         if not st.state_path(root).exists():
             return 0
-        state = st.load(root)
-        result = decide(root, state)
-        st.save(root, state)
+        with st.locked(root):
+            state = st.load(root)
+            result = decide(root, state)
+            st.save(root, state)
     except Exception:
         # A hook must never break the session: any failure allows the stop.
         return 0

@@ -175,11 +175,6 @@ def _git(args: list[str], cwd) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def repo_root(cwd) -> Path:
-    common = _git(["rev-parse", "--path-format=absolute", "--git-common-dir"], cwd)
-    return Path(common).parent if common else Path(cwd)
-
-
 def default_branch(cwd) -> str:
     ref = _git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], cwd)
     return ref.split("/", 1)[1] if "/" in ref else "main"
@@ -196,7 +191,7 @@ def main() -> int:
         cwd = payload.get("cwd")
         if not isinstance(cwd, str) or not cwd:
             cwd = "."
-        root = repo_root(cwd)
+        root = st.repo_root(cwd)
         state = None
         if st.state_path(root).exists():
             try:
