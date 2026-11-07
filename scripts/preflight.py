@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 from collections import namedtuple
@@ -62,12 +63,36 @@ def skill_search_dirs(home, root) -> list[Path]:
             Path(home) / ".claude" / "plugins"]
 
 
-def find_missing_skills(dirs) -> list[str]:
-    found = set()
+def _preference(path: Path) -> tuple:
+    # Prefer Matt Pocock's pack over same-named skills from other plugins,
+    # and an installed copy (plugins/cache) over a marketplace checkout.
+    text = path.as_posix()
+    return ("mattpocock" not in text, "/cache/" not in text, text)
+
+
+def find_skill_paths(dirs) -> dict[str, Path]:
+    """Map each required skill name to the SKILL.md file to follow."""
+    candidates: dict[str, list[Path]] = {}
     for directory in dirs:
         if directory.is_dir():
-            found.update(p.parent.name for p in directory.rglob("SKILL.md"))
+            for skill_md in directory.rglob("SKILL.md"):
+                if skill_md.parent.name in REQUIRED_SKILLS:
+                    candidates.setdefault(skill_md.parent.name, []).append(skill_md)
+    return {name: min(paths, key=_preference) for name, paths in candidates.items()}
+
+
+def find_missing_skills(dirs) -> list[str]:
+    found = find_skill_paths(dirs)
     return [name for name in REQUIRED_SKILLS if name not in found]
+
+
+def write_skill_map(root, paths: dict[str, Path]) -> Path:
+    """Write .harness/skills.json so the orchestrator can follow skills that
+    cannot be invoked through the Skill tool (disable-model-invocation)."""
+    target = Path(root) / ".harness" / "skills.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps({name: str(path) for name, path in sorted(paths.items())}, indent=2) + "\n")
+    return target
 
 
 def check_skills(home, root) -> Check:
@@ -107,6 +132,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if ensure_gitignore(args.root):
         print("updated .gitignore")
+    skill_map = write_skill_map(args.root, find_skill_paths(skill_search_dirs(args.home, args.root)))
+    print(f"wrote {skill_map}")
     return 0
 
 

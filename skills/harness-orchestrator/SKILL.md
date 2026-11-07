@@ -36,10 +36,18 @@ This table is the only place the harness names Matt Pocock's skills. If one is r
 - `--status` → run `state.py get`. Summarize the phase, any pending gate, ticket counts by status, and artifact paths. Do nothing else.
 - `--abort` → run `state.py transition aborted`, then `git worktree list`. Tell the user which harness worktrees they can remove. Do nothing else.
 
+## How to invoke a skill
+
+"Invoke `<name>`" in this skill means:
+
+1. If `<name>` from Matt Pocock's pack is available through your Skill tool, invoke it there.
+2. Otherwise read `.harness/skills.json` (written by preflight) and Read the `SKILL.md` file it maps `<name>` to. Follow that file's instructions as if the skill had been invoked, treating the file's directory as the skill's base directory for any relative paths it mentions. Many of Matt Pocock's skills set `disable-model-invocation: true`, so they only work this way. The user started them by running `/ship`.
+3. If `<name>` is missing from `.harness/skills.json`, stop and tell the user to rerun `/ship` (preflight will report what is missing).
+
 ## Gate procedure
 
 1. `state.py set-gate <gate>`
-2. Ask the gate's question with AskUserQuestion.
+2. Ask the gate's question with AskUserQuestion. If AskUserQuestion is not available in this session (for example a non-interactive run), ask the same question in plain text, list the options, and end your turn. The user's next message is their answer. The same applies to any other question a phase tells you to ask the user, including the `grill-with-docs` interview.
 3. On approval: `state.py approve-gate <gate>`. On rejection: do what that phase says, then ask again. Never approve a gate without the user's explicit answer in this session.
 
 ## Start

@@ -67,3 +67,26 @@ def test_run_all_order(tmp_path):
     run = FakeRun({("git", "rev-parse"): (0, "true\n"), ("git", "status"): (0, "")})
     names = [c.name for c in pf.run_all(tmp_path, tmp_path, run)]
     assert names == ["git repo", "clean tree", "gh auth", "matt pocock skills"]
+
+
+def test_find_skill_paths_prefers_matt_pocock_cache(tmp_path):
+    plugins = tmp_path / "home" / ".claude" / "plugins"
+    make_skills(plugins / "marketplaces" / "mattpocock" / "skills" / "engineering", ["to-spec"])
+    make_skills(plugins / "cache" / "mattpocock" / "mattpocock-skills" / "1.3.2" / "skills", ["to-spec"])
+    make_skills(plugins / "cache" / "other" / "x" / "skills", ["tdd"])
+    make_skills(plugins / "cache" / "mattpocock" / "mattpocock-skills" / "1.3.2" / "skills" / "e", ["tdd"])
+    paths = pf.find_skill_paths(pf.skill_search_dirs(tmp_path / "home", tmp_path / "repo"))
+    assert "/cache/mattpocock/" in str(paths["to-spec"])
+    assert "/cache/mattpocock/" in str(paths["tdd"])
+    assert paths["to-spec"].name == "SKILL.md"
+    assert "retro" not in paths
+
+
+def test_write_skill_map(tmp_path):
+    import json
+    skill = tmp_path / "s" / "to-spec" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text("x")
+    target = pf.write_skill_map(tmp_path, {"to-spec": skill})
+    assert target == tmp_path / ".harness" / "skills.json"
+    assert json.loads(target.read_text()) == {"to-spec": str(skill)}

@@ -52,3 +52,8 @@ def test_orchestrator_resume_and_start_ordering():
     resume = text.split("## Resume")[1].split("## Phase: triage")[0]
     assert "gh pr view <url> --json state -q .state" in resume
     assert "do not transition to build" in text
+
+
+def test_orchestrator_explains_skill_file_fallback():
+    text = read("skills/harness-orchestrator/SKILL.md")
+    assert ".harness/skills.json" in text and "disable-model-invocation" in text
