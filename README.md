@@ -11,11 +11,22 @@ It stops only at three gates: confirm the route, approve the spec, and review/me
 - Claude Code, `gh` (logged in), Python ≥ 3.10
 - Matt Pocock's skills installed: https://github.com/mattpocock/skills
 
-## Install (local development)
+## Install
+
+**Try it for one session** (nothing is installed; run from the repo you want to work on):
 
 ```bash
 claude --plugin-dir /path/to/dev-harness
 ```
+
+**Install it for every session** (this repo is its own marketplace, `sdd-harness`):
+
+```bash
+claude plugin marketplace add /path/to/dev-harness
+claude plugin install dev-harness@sdd-harness
+```
+
+Once installed, the hooks run in every Claude Code session, but they do nothing unless the repo has an active `.harness/state.json`. Remove the plugin with `claude plugin uninstall dev-harness@sdd-harness`.
 
 ## Use
 

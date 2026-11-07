@@ -1,0 +1,15 @@
+{
+  "name": "sdd-harness",
+  "owner": {
+    "name": "Kausthuba Belagod"
+  },
+  "description": "Local marketplace for the dev-harness plugin.",
+  "plugins": [
+    {
+      "name": "dev-harness",
+      "source": "./",
+      "description": "Gated, resumable automation of the Matt Pocock skills workflow: /ship an idea through spec, tickets, parallel build, PR and retro.",
+      "category": "development"
+    }
+  ]
+}
