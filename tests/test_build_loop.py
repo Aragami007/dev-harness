@@ -146,3 +146,15 @@ def test_hostile_branch_at_pr_transition_allows_stop(tmp_path):
     assert bl.decide(tmp_path, s) is None
     assert s["phase"] == "build"
     assert "invalid_state" in events(s)
+
+
+def test_hook_resolves_root_from_subdirectory(tmp_path, monkeypatch, capsys):
+    import subprocess
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    st.save(tmp_path, build_state(("T1", [])))
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"cwd": str(sub)})))
+    assert bl.main() == 0
+    assert json.loads(capsys.readouterr().out)["decision"] == "block"

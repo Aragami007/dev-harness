@@ -83,7 +83,7 @@ def main() -> int:
         if not isinstance(payload, dict):
             return 0
         cwd = payload.get("cwd")
-        root = Path(cwd if isinstance(cwd, str) and cwd else ".")
+        root = st.repo_root(cwd if isinstance(cwd, str) and cwd else ".")
         if not st.state_path(root).exists():
             return 0
         with st.locked(root):

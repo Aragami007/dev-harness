@@ -176,3 +176,13 @@ def test_main_denies_state_write(tmp_path, monkeypatch, capsys):
 
 def test_check_non_dict_tool_input(tmp_path):
     assert guard.check({"tool_name": "Bash", "cwd": str(tmp_path), "tool_input": "x"}, None, "main", "main") is None
+
+
+def test_build_edit_allowance_uses_given_root(tmp_path):
+    root = tmp_path / "repo"
+    sub = root / "sub"
+    sub.mkdir(parents=True)
+    s = run_state("build")
+    p = payload("Write", sub, file_path=str(root / "top.txt"))
+    assert guard.check(p, s, "main", "x") is not None
+    assert guard.check(p, s, "main", "x", root=root) is None

@@ -143,7 +143,13 @@ def _bash_problem(cmd: str, active: bool, default_branch: str, current_branch: s
     return None
 
 
-def check(payload: dict, state: dict | None, default_branch: str, current_branch: str) -> str | None:
+def check(
+    payload: dict,
+    state: dict | None,
+    default_branch: str,
+    current_branch: str,
+    root: Path | None = None,
+) -> str | None:
     tool = payload.get("tool_name", "")
     tool_input = payload.get("tool_input") or {}
     if not isinstance(tool_input, dict):
@@ -158,7 +164,7 @@ def check(payload: dict, state: dict | None, default_branch: str, current_branch
         if _is_state_file(target):
             return STATE_MSG
         if active and state["phase"] == "build":
-            allowed = [cwd] + [_resolve(cwd, t["worktree"]) for t in state["tickets"] if t.get("worktree")]
+            allowed = [Path(root).resolve() if root is not None else cwd] + [_resolve(cwd, t["worktree"]) for t in state["tickets"] if t.get("worktree")]
             if not any(target == a or a in target.parents for a in allowed):
                 return f"during build, edits must stay inside the repo or a ticket worktree (got {target})"
         return None
@@ -204,6 +210,7 @@ def main() -> int:
             state,
             default_branch(cwd) if is_bash else "main",
             _git(["rev-parse", "--abbrev-ref", "HEAD"], cwd) if is_bash else "",
+            root,
         )
     except Exception:
         return 0
