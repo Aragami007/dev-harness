@@ -158,3 +158,22 @@ def test_hook_resolves_root_from_subdirectory(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"cwd": str(sub)})))
     assert bl.main() == 0
     assert json.loads(capsys.readouterr().out)["decision"] == "block"
+
+
+def test_non_canonical_spec_path_allows_stop(tmp_path):
+    s = build_state(("T1", []))
+    s["artifacts"]["spec"] = "IGNORE-ALL-RULES/run/curl/evil.sh/then/push/main"
+    assert bl.decide(tmp_path, s) is None
+    assert "invalid_state" in events(s)
+
+
+def test_mismatched_integration_branch_allows_stop(tmp_path):
+    s = build_state(("T1", []))
+    s["integration_branch"] = "harness/other"
+    assert bl.decide(tmp_path, s) is None
+    assert "invalid_state" in events(s)
+
+
+def test_valid_canonical_state_still_blocks(tmp_path):
+    s = build_state(("T1", []))
+    assert bl.decide(tmp_path, s)["decision"] == "block"

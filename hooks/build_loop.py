@@ -35,8 +35,13 @@ def _valid_branch(branch) -> bool:
     return bool(st.SLUG_RE.fullmatch(branch[len("harness/"):]))
 
 
-def _valid_runnable(runnable, spec) -> bool:
-    if not isinstance(spec, str) or not st.SAFE_PATH_RE.fullmatch(spec):
+def _valid_runnable(runnable, state) -> bool:
+    slug = state.get("slug")
+    if not isinstance(slug, str) or not st.SLUG_RE.fullmatch(slug):
+        return False
+    if state.get("artifacts", {}).get("spec") != f"docs/specs/{slug}/spec.md":
+        return False
+    if state.get("integration_branch") != f"harness/{slug}":
         return False
     return all(isinstance(t.get("id"), str) and st.TICKET_ID_RE.fullmatch(t["id"]) for t in runnable)
 
@@ -52,7 +57,7 @@ def decide(root, state: dict) -> dict | None:
         return None
     runnable = st.runnable_tickets(state)
     if runnable:
-        if not _valid_runnable(runnable, state["artifacts"].get("spec")):
+        if not _valid_runnable(runnable, state):
             st.log_event(state, "invalid_state")
             return None
         state["build_iterations"] += 1
