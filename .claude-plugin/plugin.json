@@ -1,0 +1,5 @@
+{
+  "name": "dev-harness",
+  "version": "0.1.0",
+  "description": "Gated, resumable automation of the Matt Pocock skills workflow: /ship an idea through spec, tickets, parallel build, PR and retro."
+}
