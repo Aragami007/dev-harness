@@ -26,7 +26,8 @@ GH_OPTS_WITH_ARG = {"-R", "--repo"}
 
 def _tokens(cmd: str) -> list[str]:
     try:
-        lex = shlex.shlex(cmd, posix=True, punctuation_chars=True)
+        lex = shlex.shlex(cmd, posix=True, punctuation_chars="();<>|&\n")
+        lex.whitespace = " \t\r"
         lex.whitespace_split = True
         return list(lex)
     except ValueError:
@@ -34,7 +35,7 @@ def _tokens(cmd: str) -> list[str]:
 
 
 def _is_separator(tok: str) -> bool:
-    return bool(tok) and set(tok) <= set(";&|")
+    return bool(tok) and set(tok) <= set(";&|\n")
 
 
 def _shell_string(simple: list[str]) -> str | None:
@@ -42,7 +43,8 @@ def _shell_string(simple: list[str]) -> str | None:
     for i, tok in enumerate(simple):
         if Path(tok).name in SHELLS:
             for j in range(i + 1, len(simple) - 1):
-                if simple[j] == "-c":
+                flag = simple[j]
+                if flag.startswith("-") and not flag.startswith("--") and "c" in flag[1:]:
                     return simple[j + 1]
             return None
     return None
@@ -67,16 +69,18 @@ def _commands(cmd: str, depth: int = 0) -> list[list[str]]:
     return out
 
 
-def _subcommand_index(simple: list[str], tool: str, opts_with_arg: set[str]) -> int | None:
-    """Index of the subcommand of `tool` in `simple`, skipping global options."""
+def _subcommand_indexes(simple: list[str], tool: str, opts_with_arg: set[str]) -> list[int]:
+    """Indexes of the subcommand of every `tool` occurrence in `simple`, skipping global options."""
+    found = []
     for i, tok in enumerate(simple):
-        if tok != tool:
+        if Path(tok).name != tool:
             continue
         j = i + 1
         while j < len(simple) and simple[j].startswith("-"):
             j += 2 if simple[j] in opts_with_arg else 1
-        return j if j < len(simple) else None
-    return None
+        if j < len(simple):
+            found.append(j)
+    return found
 
 
 def _resolve(cwd: Path, raw: str) -> Path:
@@ -110,7 +114,7 @@ def _push_problem(args: list[str], default_branch: str, current_branch: str) -> 
         if ref.startswith("+"):
             return "force-push is blocked by dev-harness"
         dest = ref.split(":")[-1].removeprefix("refs/heads/")
-        if dest == "HEAD":
+        if dest in ("HEAD", "@"):
             dest = current_branch
         if dest == default_branch:
             return f"pushing to {default_branch} is blocked by dev-harness; the human merges the PR"
@@ -118,15 +122,16 @@ def _push_problem(args: list[str], default_branch: str, current_branch: str) -> 
 
 
 def _simple_problem(simple: list[str], default_branch: str, current_branch: str) -> str | None:
-    gi = _subcommand_index(simple, "git", GIT_OPTS_WITH_ARG)
-    if gi is not None:
+    for gi in _subcommand_indexes(simple, "git", GIT_OPTS_WITH_ARG):
         if simple[gi] == "push":
-            return _push_problem(simple[gi + 1:], default_branch, current_branch)
+            problem = _push_problem(simple[gi + 1:], default_branch, current_branch)
+            if problem:
+                return problem
         if simple[gi] == "merge" and current_branch == default_branch:
             return f"merging into {default_branch} is blocked by dev-harness"
-    hi = _subcommand_index(simple, "gh", GH_OPTS_WITH_ARG)
-    if hi is not None and simple[hi] == "pr" and simple[hi + 1:hi + 2] == ["merge"]:
-        return "merging PRs is the human's job (Gate 3)"
+    for hi in _subcommand_indexes(simple, "gh", GH_OPTS_WITH_ARG):
+        if simple[hi] == "pr" and simple[hi + 1:hi + 2] == ["merge"]:
+            return "merging PRs is the human's job (Gate 3)"
     return None
 
 
@@ -204,7 +209,8 @@ def main() -> int:
                 state = st.load(root)
             except (st.StateError, ValueError, OSError):
                 state = None
-        is_bash = payload.get("tool_name") == "Bash"
+        active = state is not None and state.get("phase") not in st.TERMINAL
+        is_bash = payload.get("tool_name") == "Bash" and active
         reason = check(
             payload,
             state,

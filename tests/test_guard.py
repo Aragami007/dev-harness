@@ -186,3 +186,23 @@ def test_build_edit_allowance_uses_given_root(tmp_path):
     p = payload("Write", sub, file_path=str(root / "top.txt"))
     assert guard.check(p, s, "main", "x") is not None
     assert guard.check(p, s, "main", "x", root=root) is None
+
+
+@pytest.mark.parametrize(
+    "cmd,current",
+    [
+        ("git status\ngit push origin main", "harness/demo"),
+        ("git status\ngit push -f origin x", "harness/demo"),
+        ("/usr/bin/git push -f origin x", "harness/demo"),
+        ('bash -lc "git push -f origin x"', "harness/demo"),
+        ("bash -ec 'git push origin main'", "harness/demo"),
+        ("git push origin @", "main"),
+        ("git log && git status && git push origin main", "harness/demo"),
+    ],
+)
+def test_guard_denies_extra_shapes(tmp_path, cmd, current):
+    assert bash(tmp_path, cmd, run_state("build"), current=current)
+
+
+def test_guard_allows_feature_push_still(tmp_path):
+    assert bash(tmp_path, "git push -u origin harness/demo", run_state("build")) is None
